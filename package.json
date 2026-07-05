@@ -4,7 +4,7 @@
   "description": "TapPay backend API (NestJS + Prisma + Paystack)",
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": "24.x"
   },
   "scripts": {
     "build": "nest build",

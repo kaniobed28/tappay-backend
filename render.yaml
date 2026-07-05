@@ -15,7 +15,9 @@ services:
     runtime: node
     plan: free
     region: frankfurt # pick the region closest to you
-    buildCommand: npm install && npx prisma generate && npm run build
+    # --include=dev: NODE_ENV=production makes npm skip devDependencies, but the build
+    # needs them (@nestjs/cli, typescript, prisma). Runtime still uses only prod deps.
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build
     startCommand: npx prisma migrate deploy && node dist/main.js
     healthCheckPath: /api/health
     envVars:
