@@ -26,9 +26,19 @@ describe('validateEnv', () => {
     expect(() => validateEnv(cfg)).toThrow(/SESSION_SIGNING_SECRET/);
   });
 
-  it('requires Firebase credentials in production (no dev-auth bypass)', () => {
+  it('requires Firebase credentials in production (no dev-auth bypass by default)', () => {
     const cfg = { ...validDev, NODE_ENV: 'production', PAYSTACK_SECRET_KEY: 'sk_live_x' };
     expect(() => validateEnv(cfg)).toThrow(/FIREBASE_SERVICE_ACCOUNT/);
+  });
+
+  it('allows production without Firebase when ALLOW_DEV_AUTH=true (explicit demo opt-in)', () => {
+    const cfg = {
+      ...validDev,
+      NODE_ENV: 'production',
+      PAYSTACK_SECRET_KEY: 'sk_live_x',
+      ALLOW_DEV_AUTH: 'true',
+    };
+    expect(() => validateEnv(cfg)).not.toThrow();
   });
 
   it('requires the provider key in production', () => {

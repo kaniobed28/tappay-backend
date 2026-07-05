@@ -22,12 +22,15 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
   }
 
   if (isProd) {
-    // No dev-auth bypass in production: Firebase credentials are mandatory.
+    // In production Firebase credentials are mandatory — UNLESS ALLOW_DEV_AUTH=true is
+    // explicitly set (a documented, insecure escape hatch for demos before Firebase is
+    // wired up). Default stays secure: no flag => Firebase required.
+    const allowDevAuth = String(config.ALLOW_DEV_AUTH) === 'true';
     const hasFirebase =
       !!config.FIREBASE_SERVICE_ACCOUNT_JSON || !!config.FIREBASE_SERVICE_ACCOUNT_PATH;
-    if (!hasFirebase) {
+    if (!hasFirebase && !allowDevAuth) {
       errors.push(
-        'In production you must set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH',
+        'In production set FIREBASE_SERVICE_ACCOUNT_JSON/PATH, or ALLOW_DEV_AUTH=true for an (insecure) demo',
       );
     }
     // The active payment provider must have credentials.

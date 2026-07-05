@@ -34,17 +34,23 @@ export class FirebaseAdminService implements OnModuleInit {
       this.logger.error(`Invalid Firebase service account: ${(err as Error).message}`);
     }
 
+    const isProd = this.config.get('NODE_ENV') === 'production';
+    const allowDevAuth = String(this.config.get('ALLOW_DEV_AUTH')) === 'true';
+
     if (credential) {
       this.app = admin.apps.length
         ? admin.app()
         : admin.initializeApp({ credential: admin.credential.cert(credential) });
       this.logger.log('Firebase Admin initialized');
-    } else if (this.config.get('NODE_ENV') !== 'production') {
-      // DEV ONLY: no Firebase configured. Accept tokens of the form "dev:<uid>[:email]"
-      // so the app is runnable locally without a Firebase project. Never enabled in prod.
+    } else if (!isProd || allowDevAuth) {
+      // No Firebase configured. Accept tokens of the form "dev:<uid>[:email]" so the app
+      // is usable without a Firebase project. Automatic in non-prod; in prod it requires
+      // the explicit ALLOW_DEV_AUTH=true flag (insecure — for demos only).
       this.devMode = true;
+      const where = isProd ? 'PRODUCTION (ALLOW_DEV_AUTH=true)' : 'development';
       this.logger.warn(
-        'Firebase not configured — running in DEV auth mode (accepts "dev:<uid>" tokens).',
+        `Firebase not configured — DEV auth mode in ${where}. Accepts "dev:<uid>" tokens; ` +
+          'ANYONE can impersonate any user. Wire Firebase and remove ALLOW_DEV_AUTH before real use.',
       );
     } else {
       this.logger.error('Firebase service account missing in production. Auth will reject all requests.');

@@ -1,0 +1,41 @@
+# Render blueprint: deploys the TapPay backend + a managed PostgreSQL.
+# In the Render dashboard: New + -> Blueprint -> connect the tappay-backend repo.
+# It reads this file, creates both services, and wires DATABASE_URL automatically.
+# You only set the two Paystack keys by hand (they're marked sync:false below).
+
+databases:
+  - name: tappay-db
+    databaseName: tappay
+    user: tappay
+    plan: free
+
+services:
+  - type: web
+    name: tappay-api
+    runtime: node
+    plan: free
+    region: frankfurt # pick the region closest to you
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/main.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tappay-db
+          property: connectionString
+      - key: SESSION_SIGNING_SECRET
+        generateValue: true # Render generates a strong secret
+      # Demo auth: lets the phones sign in without Firebase yet. INSECURE — anyone can
+      # impersonate any user. Set to false (and wire Firebase) before real/public use.
+      - key: ALLOW_DEV_AUTH
+        value: "true"
+      - key: PAYMENT_PROVIDER
+        value: paystack
+      - key: PAYSTACK_BASE_URL
+        value: https://api.paystack.co
+      - key: PAYSTACK_SECRET_KEY
+        sync: false # set in the dashboard (your sk_test_… key)
+      - key: PAYSTACK_PUBLIC_KEY
+        sync: false # set in the dashboard (your pk_test_… key)
