@@ -3,7 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from '@prisma/client';
-import { PayDto } from './dto';
+import { PayDto, RefundDto } from './dto';
 
 @Controller('payments')
 export class PaymentsController {
@@ -14,6 +14,13 @@ export class PaymentsController {
   @Post()
   pay(@CurrentUser() user: User, @Body() dto: PayDto) {
     return this.payments.payFromSession(user, dto.sessionId);
+  }
+
+  /** Merchant refunds a payment they received (full or partial). */
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post(':id/refund')
+  refund(@CurrentUser() user: User, @Param('id') id: string, @Body() dto: RefundDto) {
+    return this.payments.refund(user, id, dto);
   }
 
   /** History for the authenticated user (sent + received). */

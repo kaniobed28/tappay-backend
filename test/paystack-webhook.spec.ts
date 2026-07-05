@@ -21,7 +21,7 @@ describe('PaystackProvider.parseWebhook', () => {
   it('accepts a correctly signed payload and returns the reference', () => {
     const body = Buffer.from(JSON.stringify({ event: 'charge.success', data: { reference: 'tap_123' } }));
     const result = provider.parseWebhook(body, sign(body));
-    expect(result).toEqual({ reference: 'tap_123' });
+    expect(result).toEqual({ reference: 'tap_123', kind: 'charge' });
   });
 
   it('rejects a payload with an invalid signature', () => {
@@ -44,5 +44,24 @@ describe('PaystackProvider.parseWebhook', () => {
   it('returns null when a validly-signed payload has no reference', () => {
     const body = Buffer.from(JSON.stringify({ event: 'charge.success', data: {} }));
     expect(provider.parseWebhook(body, sign(body))).toBeNull();
+  });
+
+  it('classifies a charge event as kind "charge"', () => {
+    const body = Buffer.from(JSON.stringify({ event: 'charge.success', data: { reference: 'tap_9' } }));
+    expect(provider.parseWebhook(body, sign(body))).toEqual({ reference: 'tap_9', kind: 'charge' });
+  });
+
+  it('classifies a refund event and extracts the original transaction reference', () => {
+    const body = Buffer.from(
+      JSON.stringify({ event: 'refund.processed', data: { transaction_reference: 'tap_9' } }),
+    );
+    expect(provider.parseWebhook(body, sign(body))).toEqual({ reference: 'tap_9', kind: 'refund' });
+  });
+
+  it('handles the nested transaction.reference shape on refund events', () => {
+    const body = Buffer.from(
+      JSON.stringify({ event: 'refund.pending', data: { transaction: { reference: 'tap_9' } } }),
+    );
+    expect(provider.parseWebhook(body, sign(body))).toEqual({ reference: 'tap_9', kind: 'refund' });
   });
 });

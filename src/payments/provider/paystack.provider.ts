@@ -6,7 +6,10 @@ import {
   InitPaymentInput,
   InitPaymentResult,
   PaymentProvider,
+  RefundInput,
+  RefundResult,
   VerifyPaymentResult,
+  WebhookEvent,
 } from './payment-provider.interface';
 
 @Injectable()
@@ -62,7 +65,23 @@ export class PaystackProvider implements PaymentProvider {
     };
   }
 
-  parseWebhook(rawBody: Buffer, signature: string | undefined): { reference: string } | null {
+  async refundPayment(input: RefundInput): Promise<RefundResult> {
+    const { data } = await this.http.post('/refund', {
+      transaction: input.reference,
+      amount: input.amount, // omit for a full refund
+      merchant_note: input.reason,
+    });
+    if (!data?.status) {
+      throw new Error(data?.message ?? 'Paystack refund failed');
+    }
+    // Paystack refunds are typically async: 'pending' now, 'processed' via webhook.
+    const raw = data.data;
+    const status: RefundResult['status'] =
+      raw?.status === 'processed' ? 'processed' : raw?.status === 'failed' ? 'failed' : 'pending';
+    return { status, raw };
+  }
+
+  parseWebhook(rawBody: Buffer, signature: string | undefined): WebhookEvent | null {
     if (!signature || !this.secretKey) return null;
     const expected = crypto
       .createHmac('sha512', this.secretKey)
@@ -77,9 +96,17 @@ export class PaystackProvider implements PaymentProvider {
     }
     try {
       const event = JSON.parse(rawBody.toString('utf8'));
+      const eventName: string = event?.event ?? '';
+      if (eventName.startsWith('refund')) {
+        // Refund events carry the original transaction reference in a different field.
+        const reference =
+          event?.data?.transaction_reference ?? event?.data?.transaction?.reference;
+        if (!reference) return null;
+        return { reference, kind: 'refund' };
+      }
       const reference = event?.data?.reference;
       if (!reference) return null;
-      return { reference };
+      return { reference, kind: 'charge' };
     } catch {
       return null;
     }

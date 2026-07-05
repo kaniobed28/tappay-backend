@@ -31,6 +31,25 @@ export interface VerifyPaymentResult {
   raw: unknown;
 }
 
+export interface RefundInput {
+  reference: string;
+  amount?: number; // minor units; omit for a full refund
+  reason?: string;
+}
+
+export type RefundStatus = 'processed' | 'pending' | 'failed';
+
+export interface RefundResult {
+  status: RefundStatus;
+  raw: unknown;
+}
+
+/** A verified webhook event, normalized across providers. */
+export interface WebhookEvent {
+  reference: string;
+  kind: 'charge' | 'refund';
+}
+
 export interface PaymentProvider {
   readonly name: string;
 
@@ -40,9 +59,12 @@ export interface PaymentProvider {
   /** Authoritatively check a transaction's outcome with the provider. */
   verifyPayment(reference: string): Promise<VerifyPaymentResult>;
 
+  /** Refund a (previously successful) transaction, fully or partially. */
+  refundPayment(input: RefundInput): Promise<RefundResult>;
+
   /**
    * Validate a webhook payload's authenticity (e.g. HMAC signature) and, if valid,
-   * return the transaction reference it concerns. Returns null when invalid.
+   * return the normalized event it concerns. Returns null when invalid.
    */
-  parseWebhook(rawBody: Buffer, signature: string | undefined): { reference: string } | null;
+  parseWebhook(rawBody: Buffer, signature: string | undefined): WebhookEvent | null;
 }

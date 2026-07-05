@@ -44,9 +44,13 @@ export class WebhooksController {
     }
 
     try {
-      await this.payments.reconcile(parsed.reference);
+      if (parsed.kind === 'refund') {
+        await this.payments.markRefunded(parsed.reference);
+      } else {
+        await this.payments.reconcile(parsed.reference);
+      }
     } catch (err) {
-      this.logger.error(`Webhook reconcile failed for ${parsed.reference}: ${(err as Error).message}`);
+      this.logger.error(`Webhook handling failed for ${parsed.reference}: ${(err as Error).message}`);
     }
     return { received: true };
   }

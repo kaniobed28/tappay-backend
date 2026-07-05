@@ -63,7 +63,7 @@ export class RealtimeGateway implements OnGatewayConnection {
 
   /** Push a payment event to the merchant's room and the payer's personal room. */
   emitPaymentEvent(
-    event: 'payment.success' | 'payment.failed',
+    event: 'payment.success' | 'payment.failed' | 'payment.refunded',
     target: { merchantId: string; payerId?: string | null },
     payload: PaymentEventPayload,
   ) {

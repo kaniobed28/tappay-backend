@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -118,7 +119,8 @@ export class PaymentsService {
   async reconcile(reference: string) {
     const txn = await this.prisma.transaction.findUnique({ where: { reference } });
     if (!txn) throw new NotFoundException('Transaction not found');
-    if (txn.status === TxnStatus.SUCCESS) return txn; // already settled
+    // Don't let a charge re-verify clobber an already terminal state (e.g. REFUNDED).
+    if (txn.status === TxnStatus.SUCCESS || txn.status === TxnStatus.REFUNDED) return txn;
 
     const result = await this.provider.verifyPayment(reference);
 
@@ -146,6 +148,93 @@ export class PaymentsService {
     }
 
     return updated;
+  }
+
+  /**
+   * Merchant-initiated refund. Only the payee (merchant) may refund, and only a settled
+   * payment. The refund is confirmed asynchronously by the provider webhook, but we mark
+   * the transaction REFUNDED on acceptance so the UI reflects it immediately.
+   */
+  async refund(actor: User, transactionId: string, opts?: { amount?: number; reason?: string }) {
+    const txn = await this.prisma.transaction.findUnique({ where: { id: transactionId } });
+    if (!txn) throw new NotFoundException('Transaction not found');
+    if (txn.payeeId !== actor.id) {
+      throw new ForbiddenException('Only the merchant who received this payment can refund it');
+    }
+    if (txn.status === TxnStatus.REFUNDED) return txn; // idempotent
+    if (txn.status !== TxnStatus.SUCCESS) {
+      throw new BadRequestException('Only successful payments can be refunded');
+    }
+    if (opts?.amount != null && (opts.amount <= 0 || opts.amount > txn.amount)) {
+      throw new BadRequestException('Refund amount must be between 1 and the original amount');
+    }
+
+    try {
+      await this.provider.refundPayment({
+        reference: txn.reference,
+        amount: opts?.amount,
+        reason: opts?.reason,
+      });
+    } catch (err) {
+      this.logger.error(`Refund failed for ${txn.reference}: ${(err as Error).message}`);
+      throw new BadRequestException('Refund could not be processed by the provider');
+    }
+
+    const updated = await this.prisma.transaction.update({
+      where: { id: txn.id },
+      data: { status: TxnStatus.REFUNDED },
+    });
+    await this.onPaymentRefunded(updated);
+    return updated;
+  }
+
+  /** Confirm a refund from a provider webhook (idempotent). */
+  async markRefunded(reference: string) {
+    const txn = await this.prisma.transaction.findUnique({ where: { reference } });
+    if (!txn || txn.status === TxnStatus.REFUNDED) return txn ?? undefined;
+    const updated = await this.prisma.transaction.update({
+      where: { reference },
+      data: { status: TxnStatus.REFUNDED },
+    });
+    await this.onPaymentRefunded(updated);
+    return updated;
+  }
+
+  private async onPaymentRefunded(txn: Transaction) {
+    const amount = formatAmount(txn.amount, txn.currency);
+    this.audit.log({
+      actorId: txn.payeeId,
+      action: 'payment.refunded',
+      targetType: 'transaction',
+      targetId: txn.id,
+      meta: { reference: txn.reference, amount: txn.amount },
+    });
+
+    const payload = {
+      transactionId: txn.id,
+      reference: txn.reference,
+      amount: txn.amount,
+      currency: txn.currency,
+      status: txn.status,
+      sessionId: txn.sessionId,
+      description: txn.description,
+    };
+    this.realtime.emitPaymentEvent('payment.refunded', { merchantId: txn.merchantId, payerId: txn.payerId }, payload);
+
+    if (txn.payerId) {
+      await this.notifications.notify(txn.payerId, {
+        type: 'payment_refunded',
+        title: 'Payment refunded',
+        body: `${amount} was refunded to you${txn.description ? ` for ${txn.description}` : ''}.`,
+        data: { transactionId: txn.id, reference: txn.reference },
+      });
+    }
+    await this.notifications.notify(txn.payeeId, {
+      type: 'refund_issued',
+      title: 'Refund issued',
+      body: `You refunded ${amount}.`,
+      data: { transactionId: txn.id, reference: txn.reference },
+    });
   }
 
   private async onPaymentSuccess(txn: Transaction) {
