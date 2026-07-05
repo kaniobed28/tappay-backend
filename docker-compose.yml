@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: tappay-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tappay
+      POSTGRES_PASSWORD: tappay
+      POSTGRES_DB: tappay
+    ports:
+      - "5434:5432"
+    volumes:
+      - tappay_pgdata:/var/lib/postgresql/data
+
+volumes:
+  tappay_pgdata:

@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// A registered person. Identity is owned by Firebase Auth; we mirror the minimum here.
+model User {
+  id           String   @id @default(uuid())
+  firebaseUid  String   @unique
+  email        String?  @unique
+  phone        String?  @unique
+  displayName  String?
+  photoUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  merchant         Merchant?
+  devices          Device[]
+  sessionsCreated  PaymentSession[] @relation("SessionMerchant")
+  paymentsSent     Transaction[]    @relation("TxnPayer")
+  paymentsReceived Transaction[]    @relation("TxnPayee")
+  notifications    Notification[]
+
+  @@index([email])
+  @@index([phone])
+}
+
+/// A user who can receive payments (individual seller, shop, organization).
+model Merchant {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName String
+  category     String?
+  currency     String   @default("GHS")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions     PaymentSession[]
+  transactions Transaction[]
+}
+
+enum SessionChannel {
+  NFC
+  QR
+}
+
+enum SessionStatus {
+  PENDING
+  CONSUMED
+  EXPIRED
+  CANCELLED
+}
+
+/// A short-lived, signed handshake initiated by a merchant and consumed by a customer.
+/// The signed payload is what actually travels over NFC / inside the QR code.
+model PaymentSession {
+  id          String         @id @default(uuid())
+  merchantId  String
+  merchant    Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User           @relation("SessionMerchant", fields: [createdById], references: [id])
+  amount      Int            // minor units (e.g. pesewas / kobo)
+  currency    String         @default("GHS")
+  description String?
+  channel     SessionChannel @default(NFC)
+  status      SessionStatus  @default(PENDING)
+  nonce       String         @unique
+  signature   String
+  expiresAt   DateTime
+  createdAt   DateTime       @default(now())
+
+  transaction Transaction?
+
+  @@index([merchantId])
+  @@index([status])
+}
+
+enum TxnStatus {
+  INITIALIZED
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+model Transaction {
+  id            String    @id @default(uuid())
+  reference     String    @unique // provider reference
+  sessionId     String?   @unique
+  session       PaymentSession? @relation(fields: [sessionId], references: [id])
+  merchantId    String
+  merchant      Merchant  @relation(fields: [merchantId], references: [id])
+  payerId       String?
+  payer         User?     @relation("TxnPayer", fields: [payerId], references: [id])
+  payeeId       String
+  payee         User      @relation("TxnPayee", fields: [payeeId], references: [id])
+  amount        Int       // minor units
+  currency      String    @default("GHS")
+  provider      String    @default("paystack")
+  status        TxnStatus @default(INITIALIZED)
+  authorizationUrl String?
+  description   String?
+  providerMeta  Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([merchantId])
+  @@index([payerId])
+  @@index([status])
+}
+
+model Device {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId     String   @unique
+  platform     String?
+  pushToken    String?
+  blocked      Boolean  @default(false)
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  data      Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+/// Append-only trail of sensitive actions (auth, sessions, payments) for traceability.
+/// actorId is stored loosely (no FK) so logs survive even if a user record is removed.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  targetType String?
+  targetId   String?
+  ip         String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+}
