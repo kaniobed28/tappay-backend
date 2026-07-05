@@ -8,6 +8,7 @@ databases:
     databaseName: tappay
     user: tappay
     plan: free
+    region: frankfurt # MUST match the web service region for internal DB access
 
 services:
   - type: web
