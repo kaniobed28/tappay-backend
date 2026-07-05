@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { PaymentsService } from './payments.service';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from '@prisma/client';
@@ -9,6 +10,7 @@ export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
   /** Customer confirms a session and starts checkout. */
+  @Throttle({ default: { ttl: 60_000, limit: 10 } }) // max 10 payment inits/min per IP
   @Post()
   pay(@CurrentUser() user: User, @Body() dto: PayDto) {
     return this.payments.payFromSession(user, dto.sessionId);

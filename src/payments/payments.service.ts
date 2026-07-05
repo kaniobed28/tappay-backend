@@ -47,7 +47,9 @@ export class PaymentsService {
     }
 
     const reference = `tap_${crypto.randomBytes(10).toString('hex')}`;
-    const email = payer.email ?? `${payer.firebaseUid}@tappay.local`;
+    // Provider requires a valid email; `.local` fails Paystack validation, so fall back to
+    // a routable placeholder domain for users who have no email on file.
+    const email = payer.email ?? `${payer.firebaseUid}@tappay.app`;
 
     // Record the intent before contacting the provider (idempotent single-use session).
     const txn = await this.prisma.transaction.create({

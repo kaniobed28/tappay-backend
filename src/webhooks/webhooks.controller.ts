@@ -8,10 +8,13 @@ import {
   Req,
 } from '@nestjs/common';
 import { Request } from 'express';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Public } from '../auth/public.decorator';
 import { PaymentsService } from '../payments/payments.service';
 import { PAYMENT_PROVIDER, PaymentProvider } from '../payments/provider/payment-provider.interface';
 
+// Provider webhooks arrive in bursts from a small set of IPs — never rate-limit them.
+@SkipThrottle()
 @Controller('webhooks')
 export class WebhooksController {
   private readonly logger = new Logger(WebhooksController.name);
