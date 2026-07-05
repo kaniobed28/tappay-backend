@@ -35,6 +35,7 @@ import { HealthController } from './health.controller';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggerMiddleware).forRoutes('*');
+    // Express 5 / path-to-regexp v8 requires a named wildcard (bare '*' is deprecated).
+    consumer.apply(LoggerMiddleware).forRoutes('{*path}');
   }
 }
