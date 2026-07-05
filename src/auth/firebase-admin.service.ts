@@ -28,15 +28,16 @@ export class FirebaseAdminService implements OnModuleInit {
 
     let credential: admin.ServiceAccount | undefined;
     try {
-      let raw: string | undefined;
-      if (b64) raw = Buffer.from(b64.trim(), 'base64').toString('utf8');
-      else if (json) raw = json;
-      else if (path && fs.existsSync(path)) raw = fs.readFileSync(path, 'utf8');
+      const candidate =
+        (b64 && b64.trim()) ||
+        (json && json.trim()) ||
+        (path && fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : undefined);
 
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (!parsed.project_id) {
-          throw new Error('missing "project_id" — the value is not the full service-account JSON');
+      if (candidate) {
+        // Tolerant of either form: raw JSON, or base64-encoded JSON, in any of the vars.
+        const parsed = this.parseServiceAccount(candidate);
+        if (!parsed || !parsed.project_id) {
+          throw new Error('could not read a service account with "project_id" (accepts raw JSON or base64 JSON)');
         }
         credential = parsed;
       }
@@ -69,6 +70,26 @@ export class FirebaseAdminService implements OnModuleInit {
       );
     } else {
       this.logger.error('Firebase service account missing in production. Auth will reject all requests.');
+    }
+  }
+
+  /** Parses a service account from raw JSON or base64-encoded JSON. Returns null if neither. */
+  private parseServiceAccount(value: string): any {
+    const tryJson = (s: string) => {
+      try {
+        return JSON.parse(s);
+      } catch {
+        return null;
+      }
+    };
+    // 1) direct JSON
+    const direct = tryJson(value);
+    if (direct) return direct;
+    // 2) base64-encoded JSON
+    try {
+      return tryJson(Buffer.from(value, 'base64').toString('utf8'));
+    } catch {
+      return null;
     }
   }
 
