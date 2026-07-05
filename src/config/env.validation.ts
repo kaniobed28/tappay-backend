@@ -27,7 +27,9 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
     // wired up). Default stays secure: no flag => Firebase required.
     const allowDevAuth = String(config.ALLOW_DEV_AUTH) === 'true';
     const hasFirebase =
-      !!config.FIREBASE_SERVICE_ACCOUNT_JSON || !!config.FIREBASE_SERVICE_ACCOUNT_PATH;
+      !!config.FIREBASE_SERVICE_ACCOUNT_BASE64 ||
+      !!config.FIREBASE_SERVICE_ACCOUNT_JSON ||
+      !!config.FIREBASE_SERVICE_ACCOUNT_PATH;
     if (!hasFirebase && !allowDevAuth) {
       errors.push(
         'In production set FIREBASE_SERVICE_ACCOUNT_JSON/PATH, or ALLOW_DEV_AUTH=true for an (insecure) demo',

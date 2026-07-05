@@ -20,15 +20,25 @@ export class FirebaseAdminService implements OnModuleInit {
   constructor(private readonly config: ConfigService) {}
 
   onModuleInit() {
+    // Prefer base64 (single-line, paste-safe) over raw JSON (its private-key newlines
+    // are easily mangled in env-var fields). Both, or a file path, are supported.
+    const b64 = this.config.get<string>('FIREBASE_SERVICE_ACCOUNT_BASE64');
     const json = this.config.get<string>('FIREBASE_SERVICE_ACCOUNT_JSON');
     const path = this.config.get<string>('FIREBASE_SERVICE_ACCOUNT_PATH');
 
     let credential: admin.ServiceAccount | undefined;
     try {
-      if (json) {
-        credential = JSON.parse(json);
-      } else if (path && fs.existsSync(path)) {
-        credential = JSON.parse(fs.readFileSync(path, 'utf8'));
+      let raw: string | undefined;
+      if (b64) raw = Buffer.from(b64.trim(), 'base64').toString('utf8');
+      else if (json) raw = json;
+      else if (path && fs.existsSync(path)) raw = fs.readFileSync(path, 'utf8');
+
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (!parsed.project_id) {
+          throw new Error('missing "project_id" — the value is not the full service-account JSON');
+        }
+        credential = parsed;
       }
     } catch (err) {
       this.logger.error(`Invalid Firebase service account: ${(err as Error).message}`);
@@ -38,10 +48,15 @@ export class FirebaseAdminService implements OnModuleInit {
     const allowDevAuth = String(this.config.get('ALLOW_DEV_AUTH')) === 'true';
 
     if (credential) {
-      this.app = admin.apps.length
-        ? admin.app()
-        : admin.initializeApp({ credential: admin.credential.cert(credential) });
-      this.logger.log('Firebase Admin initialized');
+      // Never let a bad credential crash the whole payments API (avoids a boot crash-loop).
+      try {
+        this.app = admin.apps.length
+          ? admin.app()
+          : admin.initializeApp({ credential: admin.credential.cert(credential) });
+        this.logger.log('Firebase Admin initialized');
+      } catch (err) {
+        this.logger.error(`Firebase init failed — auth will reject requests: ${(err as Error).message}`);
+      }
     } else if (!isProd || allowDevAuth) {
       // No Firebase configured. Accept tokens of the form "dev:<uid>[:email]" so the app
       // is usable without a Firebase project. Automatic in non-prod; in prod it requires
