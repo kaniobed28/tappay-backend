@@ -13,7 +13,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
     "lint": "eslint \"src/**/*.ts\" --fix",
-    "test": "jest"
+    "test": "jest",
+    "test:int": "jest -c jest.integration.config.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
