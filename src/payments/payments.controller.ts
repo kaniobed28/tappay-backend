@@ -26,7 +26,8 @@ export class PaymentsController {
   /** History for the authenticated user (sent + received). */
   @Get()
   history(@CurrentUser() user: User, @Query('take') take?: string) {
-    return this.payments.history(user, take ? Number(take) : undefined);
+    const n = Number(take);
+    return this.payments.history(user, Number.isInteger(n) && n > 0 ? Math.min(n, 200) : undefined);
   }
 
   /** Poll a single transaction; forces a provider reconcile so status is authoritative. */

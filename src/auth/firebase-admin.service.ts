@@ -96,11 +96,18 @@ export class FirebaseAdminService implements OnModuleInit {
   async verifyToken(token: string): Promise<VerifiedIdentity> {
     if (this.devMode) {
       // "dev:<uid>" or "dev:<uid>:email@example.com"
-      const parts = token.split(':');
-      if (parts[0] !== 'dev' || !parts[1]) {
-        throw new Error('Dev auth expects token "dev:<uid>[:email]"');
+      if (token.startsWith('dev:')) {
+        const parts = token.split(':');
+        if (!parts[1]) throw new Error('Dev auth expects token "dev:<uid>[:email]"');
+        return { uid: parts[1], email: parts[2] };
       }
-      return { uid: parts[1], email: parts[2] };
+      // The app may be running with a real Firebase project while this backend has no
+      // service account (common local setup). Accept the ID token WITHOUT signature
+      // verification — dev mode already allows arbitrary impersonation, so this adds
+      // no new risk, and it stops every request from 401ing in that setup.
+      const unverified = this.decodeUnverifiedJwt(token);
+      if (unverified) return unverified;
+      throw new Error('Dev auth expects "dev:<uid>[:email]" or a Firebase ID token');
     }
 
     if (!this.app) throw new Error('Auth is not configured');
@@ -112,6 +119,26 @@ export class FirebaseAdminService implements OnModuleInit {
       name: decoded.name,
       picture: decoded.picture,
     };
+  }
+
+  /** Decodes a JWT payload without verifying its signature. DEV MODE ONLY. */
+  private decodeUnverifiedJwt(token: string): VerifiedIdentity | null {
+    const segments = token.split('.');
+    if (segments.length !== 3) return null;
+    try {
+      const payload = JSON.parse(Buffer.from(segments[1], 'base64url').toString('utf8'));
+      const uid = payload.user_id ?? payload.sub;
+      if (!uid || typeof uid !== 'string') return null;
+      return {
+        uid,
+        email: payload.email,
+        phone: payload.phone_number,
+        name: payload.name,
+        picture: payload.picture,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /** Firebase Cloud Messaging handle, or null when Firebase isn't configured (dev). */

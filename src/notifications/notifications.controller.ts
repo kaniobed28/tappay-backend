@@ -9,7 +9,8 @@ export class NotificationsController {
 
   @Get()
   list(@CurrentUser() user: User, @Query('take') take?: string) {
-    return this.notifications.list(user.id, take ? Number(take) : undefined);
+    const n = Number(take);
+    return this.notifications.list(user.id, Number.isInteger(n) && n > 0 ? Math.min(n, 200) : undefined);
   }
 
   @Patch(':id/read')

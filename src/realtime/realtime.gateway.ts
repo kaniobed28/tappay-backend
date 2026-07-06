@@ -61,13 +61,21 @@ export class RealtimeGateway implements OnGatewayConnection {
     }
   }
 
-  /** Push a payment event to the merchant's room and the payer's personal room. */
+  /**
+   * Push a payment event to the merchant's room, the payee's personal room and the
+   * payer's personal room. The payee room matters: a socket only joins its merchant
+   * room at connect time, so a merchant who registered *after* connecting would
+   * otherwise never receive the event. A single `to([...])` emit dedupes sockets
+   * that are in more than one of these rooms.
+   */
   emitPaymentEvent(
     event: 'payment.success' | 'payment.failed' | 'payment.refunded',
-    target: { merchantId: string; payerId?: string | null },
+    target: { merchantId: string; payeeId?: string | null; payerId?: string | null },
     payload: PaymentEventPayload,
   ) {
-    this.server.to(`merchant:${target.merchantId}`).emit(event, payload);
-    if (target.payerId) this.server.to(`user:${target.payerId}`).emit(event, payload);
+    const rooms = [`merchant:${target.merchantId}`];
+    if (target.payeeId) rooms.push(`user:${target.payeeId}`);
+    if (target.payerId) rooms.push(`user:${target.payerId}`);
+    this.server.to(rooms).emit(event, payload);
   }
 }

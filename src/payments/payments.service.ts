@@ -219,7 +219,11 @@ export class PaymentsService {
       sessionId: txn.sessionId,
       description: txn.description,
     };
-    this.realtime.emitPaymentEvent('payment.refunded', { merchantId: txn.merchantId, payerId: txn.payerId }, payload);
+    this.realtime.emitPaymentEvent(
+      'payment.refunded',
+      { merchantId: txn.merchantId, payeeId: txn.payeeId, payerId: txn.payerId },
+      payload,
+    );
 
     if (txn.payerId) {
       await this.notifications.notify(txn.payerId, {
@@ -256,7 +260,11 @@ export class PaymentsService {
       sessionId: txn.sessionId,
       description: txn.description,
     };
-    this.realtime.emitPaymentEvent('payment.success', { merchantId: txn.merchantId, payerId: txn.payerId }, payload);
+    this.realtime.emitPaymentEvent(
+      'payment.success',
+      { merchantId: txn.merchantId, payeeId: txn.payeeId, payerId: txn.payerId },
+      payload,
+    );
 
     // Merchant gets "payment received"; payer gets a receipt-style confirmation.
     await this.notifications.notify(txn.payeeId, {
@@ -285,7 +293,7 @@ export class PaymentsService {
     });
     this.realtime.emitPaymentEvent(
       'payment.failed',
-      { merchantId: txn.merchantId, payerId: txn.payerId },
+      { merchantId: txn.merchantId, payeeId: txn.payeeId, payerId: txn.payerId },
       {
         transactionId: txn.id,
         reference: txn.reference,
