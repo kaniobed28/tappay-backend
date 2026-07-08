@@ -9,15 +9,40 @@ export class UsersService {
 
   /** Find-or-create the local user mirror for a verified Firebase identity. */
   async upsertFromIdentity(identity: VerifiedIdentity): Promise<User> {
-    return this.prisma.user.upsert({
+    const profile = {
+      email: identity.email ?? undefined,
+      phone: identity.phone ?? undefined,
+      displayName: identity.name ?? undefined,
+      photoUrl: identity.picture ?? undefined,
+    };
+
+    // Primary key for auth is firebaseUid.
+    const byUid = await this.prisma.user.findUnique({
       where: { firebaseUid: identity.uid },
-      update: {
-        email: identity.email ?? undefined,
-        phone: identity.phone ?? undefined,
-        displayName: identity.name ?? undefined,
-        photoUrl: identity.picture ?? undefined,
-      },
-      create: {
+    });
+    if (byUid) {
+      return this.prisma.user.update({ where: { id: byUid.id }, data: profile });
+    }
+
+    // No account for this uid yet. Email is globally unique, so if this email already
+    // belongs to another identity (e.g. the user deleted and re-created their Firebase
+    // account, or a dev-mode row pre-exists), re-link that record to the new uid instead
+    // of crashing on the unique constraint. Firebase verifies the email, so this is a
+    // safe account-linking step, not a takeover vector.
+    if (identity.email) {
+      const byEmail = await this.prisma.user.findFirst({
+        where: { email: { equals: identity.email, mode: 'insensitive' } },
+      });
+      if (byEmail) {
+        return this.prisma.user.update({
+          where: { id: byEmail.id },
+          data: { firebaseUid: identity.uid, ...profile },
+        });
+      }
+    }
+
+    return this.prisma.user.create({
+      data: {
         firebaseUid: identity.uid,
         email: identity.email,
         phone: identity.phone,
