@@ -24,6 +24,8 @@ model User {
   paymentsSent     Transaction[]    @relation("TxnPayer")
   paymentsReceived Transaction[]    @relation("TxnPayee")
   notifications    Notification[]
+  requestsMade     PaymentRequest[] @relation("RequestRequester")
+  requestsReceived PaymentRequest[] @relation("RequestPayer")
 
   @@index([email])
   @@index([phone])
@@ -113,6 +115,37 @@ model Transaction {
   @@index([merchantId])
   @@index([payerId])
   @@index([status])
+}
+
+enum PaymentRequestStatus {
+  PENDING
+  PAID
+  CANCELLED
+  DECLINED
+}
+
+/// A targeted, asynchronous "please pay me" addressed to a known user (by email/phone).
+/// The requester is the payee (receives money); the payer is asked to settle it, which
+/// routes into the existing session -> provider checkout flow. Complements the live
+/// NFC/QR session broadcast, which is anonymous and synchronous.
+model PaymentRequest {
+  id            String               @id @default(uuid())
+  requesterId   String
+  requester     User                 @relation("RequestRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  payerId       String
+  payer         User                 @relation("RequestPayer", fields: [payerId], references: [id], onDelete: Cascade)
+  amount        Int                  // minor units (pesewas / kobo)
+  currency      String               @default("GHS")
+  note          String?
+  status        PaymentRequestStatus @default(PENDING)
+  // Set once the payer starts checkout; links the request to the settling payment.
+  sessionId     String?
+  transactionId String?              @unique
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@index([payerId, status])
+  @@index([requesterId, status])
 }
 
 model Device {

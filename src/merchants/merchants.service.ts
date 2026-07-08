@@ -36,6 +36,22 @@ export class MerchantsService {
     return merchant;
   }
 
+  /**
+   * Guarantee a user can receive money by provisioning a personal merchant profile on
+   * demand. Used by the request-money flow: the requester (payee) may not have set up a
+   * business yet, but accepting a payment still needs a merchant to settle against.
+   */
+  async ensurePersonalMerchant(userId: string): Promise<Merchant> {
+    const existing = await this.prisma.merchant.findUnique({ where: { userId } });
+    if (existing) {
+      if (!existing.active) throw new ForbiddenException('Recipient account is inactive');
+      return existing;
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const businessName = user?.displayName?.trim() || 'TapPay user';
+    return this.prisma.merchant.create({ data: { userId, businessName } });
+  }
+
   async publicView(merchantId: string) {
     const merchant = await this.prisma.merchant.findUnique({ where: { id: merchantId } });
     if (!merchant) throw new NotFoundException('Merchant not found');

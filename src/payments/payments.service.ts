@@ -15,7 +15,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AuditService } from '../audit/audit.service';
 import { formatAmount } from '../common/format';
-import { Transaction, TxnStatus, User } from '@prisma/client';
+import { PaymentRequestStatus, Transaction, TxnStatus, User } from '@prisma/client';
 
 @Injectable()
 export class PaymentsService {
@@ -281,6 +281,47 @@ export class PaymentsService {
         data: { transactionId: txn.id, reference: txn.reference },
       });
     }
+
+    await this.settleLinkedRequest(txn);
+  }
+
+  /**
+   * If this settled payment fulfils a money request, mark the request PAID and notify the
+   * requester. Idempotent: guarded on the request still being PENDING, so a webhook replay
+   * or a poll-triggered reconcile won't double-fire.
+   */
+  private async settleLinkedRequest(txn: Transaction) {
+    const request = await this.prisma.paymentRequest.findUnique({
+      where: { transactionId: txn.id },
+    });
+    if (!request || request.status !== PaymentRequestStatus.PENDING) return;
+
+    await this.prisma.paymentRequest.update({
+      where: { id: request.id },
+      data: { status: PaymentRequestStatus.PAID },
+    });
+
+    const amount = formatAmount(request.amount, request.currency);
+    this.audit.log({
+      actorId: txn.payerId,
+      action: 'request.paid',
+      targetType: 'payment_request',
+      targetId: request.id,
+      meta: { transactionId: txn.id, amount: request.amount },
+    });
+    this.realtime.emitRequestEvent('request.paid', request.requesterId, {
+      requestId: request.id,
+      amount: request.amount,
+      currency: request.currency,
+      status: PaymentRequestStatus.PAID,
+      note: request.note,
+    });
+    await this.notifications.notify(request.requesterId, {
+      type: 'request_paid',
+      title: 'Request paid',
+      body: `Your request for ${amount} was paid.`,
+      data: { requestId: request.id, transactionId: txn.id },
+    });
   }
 
   private async onPaymentFailed(txn: Transaction) {

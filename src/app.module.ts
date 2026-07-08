@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MerchantsModule } from './merchants/merchants.module';
 import { PaymentsModule } from './payments/payments.module';
+import { RequestsModule } from './requests/requests.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -28,6 +29,7 @@ import { HealthController } from './health.controller';
     NotificationsModule,
     RealtimeModule,
     PaymentsModule,
+    RequestsModule,
     WebhooksModule,
   ],
   controllers: [HealthController],

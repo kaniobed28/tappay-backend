@@ -18,6 +18,6 @@ import { PAYMENT_PROVIDER } from './provider/payment-provider.interface';
     // Default provider binding. Swap this to change payment processors.
     { provide: PAYMENT_PROVIDER, useClass: PaystackProvider },
   ],
-  exports: [PaymentsService, PAYMENT_PROVIDER],
+  exports: [PaymentsService, SessionService, PAYMENT_PROVIDER],
 })
 export class PaymentsModule {}

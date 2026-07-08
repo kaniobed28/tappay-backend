@@ -13,6 +13,8 @@ function setup(overrides: { verifyResult: any; txn: any }) {
       findUnique: jest.fn().mockResolvedValue(overrides.txn),
       update: updateMock,
     },
+    // A reconcile now also checks whether the settled txn fulfils a money request.
+    paymentRequest: { findUnique: jest.fn().mockResolvedValue(null) },
   };
   const provider = {
     name: 'paystack',

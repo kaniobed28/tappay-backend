@@ -19,6 +19,14 @@ interface PaymentEventPayload {
   description?: string | null;
 }
 
+interface RequestEventPayload {
+  requestId: string;
+  amount: number;
+  currency: string;
+  status: string;
+  note?: string | null;
+}
+
 /**
  * Real-time channel. Clients authenticate on connect with a Firebase/dev token
  * (`socket.handshake.auth.token`). Each socket joins a personal room and, if the user is a
@@ -77,5 +85,17 @@ export class RealtimeGateway implements OnGatewayConnection {
     if (target.payeeId) rooms.push(`user:${target.payeeId}`);
     if (target.payerId) rooms.push(`user:${target.payerId}`);
     this.server.to(rooms).emit(event, payload);
+  }
+
+  /**
+   * Push a money-request event to a single user's personal room — the payer when a request
+   * is created, the requester when it is paid/declined, the payer when it is cancelled.
+   */
+  emitRequestEvent(
+    event: 'request.created' | 'request.paid' | 'request.declined' | 'request.cancelled',
+    userId: string,
+    payload: RequestEventPayload,
+  ) {
+    this.server.to(`user:${userId}`).emit(event, payload);
   }
 }

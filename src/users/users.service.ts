@@ -31,6 +31,17 @@ export class UsersService {
     return this.prisma.user.update({ where: { id: userId }, data });
   }
 
+  /** Resolve a user by their email (case-insensitive) or phone. Returns null if none. */
+  async findByIdentifier(identifier: string): Promise<User | null> {
+    const value = identifier.trim();
+    if (!value) return null;
+    return this.prisma.user.findFirst({
+      where: {
+        OR: [{ email: { equals: value, mode: 'insensitive' } }, { phone: value }],
+      },
+    });
+  }
+
   async registerDevice(userId: string, deviceId: string, platform?: string, pushToken?: string) {
     return this.prisma.device.upsert({
       where: { deviceId },
