@@ -29,11 +29,28 @@ export class PaystackProvider implements PaymentProvider {
   }
 
   async initializePayment(input: InitPaymentInput): Promise<InitPaymentResult> {
+    try {
+      return await this.postInitialize(input, input.email);
+    } catch (err) {
+      // Paystack validates the email's format/TLD and rejects addresses like "x@foo.try"
+      // with a 400 ("Invalid Email Address Passed"). That must not hard-fail the payment:
+      // we reconcile by reference and issue our own receipt, so the payer's email is not
+      // load-bearing. Retry once with a valid synthetic address tied to the reference.
+      if (this.isInvalidEmailError(err)) {
+        const fallback = `payer-${input.reference}@tappay-user.com`;
+        this.logger.warn(`Provider rejected payer email "${input.email}"; retrying with ${fallback}`);
+        return this.postInitialize(input, fallback);
+      }
+      throw err;
+    }
+  }
+
+  private async postInitialize(input: InitPaymentInput, email: string): Promise<InitPaymentResult> {
     const { data } = await this.http.post('/transaction/initialize', {
       reference: input.reference,
       amount: input.amount, // Paystack expects minor units
       currency: input.currency,
-      email: input.email,
+      email,
       callback_url: input.callbackUrl,
       metadata: input.metadata,
     });
@@ -46,6 +63,16 @@ export class PaystackProvider implements PaymentProvider {
       providerReference: data.data.reference,
       raw: data.data,
     };
+  }
+
+  /** True when Paystack rejected the request specifically because the email was invalid. */
+  private isInvalidEmailError(err: unknown): boolean {
+    if (!axios.isAxiosError(err)) return false;
+    const status = err.response?.status;
+    const message = String(
+      (err.response?.data as { message?: string } | undefined)?.message ?? '',
+    ).toLowerCase();
+    return status === 400 && message.includes('email');
   }
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResult> {
