@@ -55,3 +55,21 @@ needed after that — sign in with any email/password and tap away.
   request then takes ~50s to wake. Free Postgres is time-limited — upgrade for anything lasting.
 - **Migrations** run automatically on deploy (`prisma migrate deploy`). Schema changes = add a
   migration and push; Render redeploys and applies it.
+
+## Triggering deploys
+
+Ideally, enable **Settings → Build & Deploy → Auto-Deploy = Yes** so every push to `main`
+deploys automatically.
+
+If auto-deploy is off (or you want to deploy on demand), use a **Deploy Hook**:
+
+1. Render dashboard → `tappay-api` → **Settings → Deploy Hook** → copy the URL.
+2. Save it locally (gitignored) so the helper script can use it:
+   ```bash
+   echo 'https://api.render.com/deploy/srv-...?key=...' > scripts/.render-deploy-hook
+   ```
+3. Deploy any time with:
+   ```bash
+   ./scripts/render-deploy.sh
+   ```
+   It POSTs the hook and waits until `/api/health` is back to `200`.

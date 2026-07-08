@@ -5,3 +5,6 @@ dist/
 .env.local
 *.log
 firebase-service-account.json
+
+# Render deploy hook (secret URL) — never commit
+scripts/.render-deploy-hook
