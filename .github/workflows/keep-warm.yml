@@ -1,49 +1,49 @@
-# Keep-warm ping to beat Render free-tier cold starts.
-#
-# Render free-tier services spin down after ~15 min of inactivity, so the next
-# request eats a 30-60s cold start. This workflow pings the health endpoint every
-# ~10 minutes to keep the instance warm.
-#
-# NOTE: GitHub automatically disables scheduled workflows on repositories that have
-# had no commit activity for ~60 days. If pings stop, push any commit to re-enable,
-# or run this workflow manually via the "Run workflow" button (workflow_dispatch).
+# # Keep-warm ping to beat Render free-tier cold starts.
+# #
+# # Render free-tier services spin down after ~15 min of inactivity, so the next
+# # request eats a 30-60s cold start. This workflow pings the health endpoint every
+# # ~10 minutes to keep the instance warm.
+# #
+# # NOTE: GitHub automatically disables scheduled workflows on repositories that have
+# # had no commit activity for ~60 days. If pings stop, push any commit to re-enable,
+# # or run this workflow manually via the "Run workflow" button (workflow_dispatch).
 
-name: keep-warm
+# name: keep-warm
 
-on:
-  schedule:
-    - cron: "*/10 * * * *"
-  workflow_dispatch:
+# on:
+#   schedule:
+#     - cron: "*/10 * * * *"
+#   workflow_dispatch:
 
-env:
-  # URL to ping; override here if the deployment moves.
-  HEALTH_URL: "https://tappay-api.onrender.com/api/health"
+# env:
+#   # URL to ping; override here if the deployment moves.
+#   HEALTH_URL: "https://tappay-api.onrender.com/api/health"
 
-jobs:
-  ping:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Ping health endpoint
-        run: |
-          echo "Pinging $HEALTH_URL"
-          http_code=$(curl \
-            --silent \
-            --show-error \
-            --location \
-            --max-time 90 \
-            --retry 3 \
-            --retry-all-errors \
-            --retry-delay 5 \
-            --write-out 'HTTP %{http_code} in %{time_total}s\n' \
-            --output /tmp/keep-warm-body.txt \
-            "$HEALTH_URL")
-          echo "Response body:"
-          cat /tmp/keep-warm-body.txt
-          echo
-          echo "$http_code"
-          status=$(echo "$http_code" | grep -oE '[0-9]{3}' | head -n1)
-          if [ -z "$status" ] || [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
-            echo "::error::Health check failed (HTTP ${status:-none})"
-            exit 1
-          fi
-          echo "Health check passed."
+# jobs:
+#   ping:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Ping health endpoint
+#         run: |
+#           echo "Pinging $HEALTH_URL"
+#           http_code=$(curl \
+#             --silent \
+#             --show-error \
+#             --location \
+#             --max-time 90 \
+#             --retry 3 \
+#             --retry-all-errors \
+#             --retry-delay 5 \
+#             --write-out 'HTTP %{http_code} in %{time_total}s\n' \
+#             --output /tmp/keep-warm-body.txt \
+#             "$HEALTH_URL")
+#           echo "Response body:"
+#           cat /tmp/keep-warm-body.txt
+#           echo
+#           echo "$http_code"
+#           status=$(echo "$http_code" | grep -oE '[0-9]{3}' | head -n1)
+#           if [ -z "$status" ] || [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+#             echo "::error::Health check failed (HTTP ${status:-none})"
+#             exit 1
+#           fi
+#           echo "Health check passed."
