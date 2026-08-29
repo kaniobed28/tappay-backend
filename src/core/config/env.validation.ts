@@ -36,9 +36,20 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
       );
     }
     // The active payment provider must have credentials.
-    const provider = String(config.PAYMENT_PROVIDER ?? 'paystack');
+    const provider = String(config.PAYMENT_PROVIDER ?? 'momo').trim().toLowerCase();
     if (provider === 'paystack' && !config.PAYSTACK_SECRET_KEY) {
       errors.push('PAYSTACK_SECRET_KEY is required when PAYMENT_PROVIDER=paystack');
+    }
+    if (provider === 'momo') {
+      // MTN mints an access token from the API user/key pair, and every call also carries
+      // the subscription key — a missing one fails only at the first real payment.
+      for (const key of ['MOMO_SUBSCRIPTION_KEY', 'MOMO_API_USER', 'MOMO_API_KEY']) {
+        if (!config[key]) errors.push(`${key} is required when PAYMENT_PROVIDER=momo`);
+      }
+      // 'sandbox' is MTN's test wallet platform; it cannot settle real money.
+      if (String(config.MOMO_TARGET_ENVIRONMENT ?? 'mtnghana') === 'sandbox') {
+        errors.push('MOMO_TARGET_ENVIRONMENT=sandbox cannot be used in production');
+      }
     }
   }
 

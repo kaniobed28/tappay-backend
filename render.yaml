@@ -1,14 +1,9 @@
-# Render blueprint: deploys the TapPay backend + a managed PostgreSQL.
+# Render blueprint: deploys the TapPay backend. The database lives on Neon, NOT Render.
 # In the Render dashboard: New + -> Blueprint -> connect the tappay-backend repo.
-# It reads this file, creates both services, and wires DATABASE_URL automatically.
-# You only set the two Paystack keys by hand (they're marked sync:false below).
-
-databases:
-  - name: tappay-db
-    databaseName: tappay
-    user: tappay
-    plan: free
-    region: frankfurt # MUST match the web service region for internal DB access
+#
+# Render's free Postgres expires after 30 days, so the DB moved to Neon's free tier
+# (no expiry). Nothing here provisions a database any more — you paste Neon's two
+# connection strings into the dashboard by hand. See DEPLOY.md for the walkthrough.
 
 services:
   - type: web
@@ -24,18 +19,44 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Neon pooled connection — the "Pooled connection" string from the Neon dashboard.
+      # Host contains "-pooler". Must end with ?sslmode=require&pgbouncer=true
       - key: DATABASE_URL
-        fromDatabase:
-          name: tappay-db
-          property: connectionString
+        sync: false # set in the dashboard
+      # Neon direct connection — same string WITHOUT "-pooler" in the host and without
+      # pgbouncer=true. Used only by `prisma migrate deploy` in the start command.
+      - key: DIRECT_URL
+        sync: false # set in the dashboard
       - key: SESSION_SIGNING_SECRET
         generateValue: true # Render generates a strong secret
       # Demo auth: lets the phones sign in without Firebase yet. INSECURE — anyone can
       # impersonate any user. Set to false (and wire Firebase) before real/public use.
       - key: ALLOW_DEV_AUTH
         value: "true"
+      # momo | paystack. MoMo needs the three MOMO_* credentials below, and the API
+      # refuses to boot without them — deliberately, so a misconfigured deploy fails
+      # loudly instead of taking payments through the wrong provider.
       - key: PAYMENT_PROVIDER
-        value: paystack
+        value: momo
+      # ---- MTN Mobile Money (Ghana) ----
+      # Production credentials, from MTN Ghana under contract — NOT the sandbox ones.
+      # The sandbox cannot settle real money, and NODE_ENV=production refuses to start
+      # with MOMO_TARGET_ENVIRONMENT=sandbox.
+      - key: MOMO_TARGET_ENVIRONMENT
+        value: mtnghana
+      - key: MOMO_BASE_URL
+        value: https://proxy.momoapi.mtn.com
+      - key: MOMO_SUBSCRIPTION_KEY
+        sync: false # set in the dashboard (Collection product primary key)
+      - key: MOMO_API_USER
+        sync: false # set in the dashboard
+      - key: MOMO_API_KEY
+        sync: false # set in the dashboard
+      # MTN delivers callbacks only to the host registered with the API user. Optional:
+      # settlement rides on polling either way.
+      - key: MOMO_CALLBACK_URL
+        sync: false
+      # ---- Paystack (fallback provider; set PAYMENT_PROVIDER=paystack to use) ----
       - key: PAYSTACK_BASE_URL
         value: https://api.paystack.co
       - key: PAYSTACK_SECRET_KEY

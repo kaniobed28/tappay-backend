@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../core/prisma/prisma.service';
 import { FirebaseAdminService } from '../auth/firebase-admin.service';
 
 interface NotifyInput {

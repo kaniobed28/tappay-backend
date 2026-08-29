@@ -2,37 +2,41 @@ import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { LoggerMiddleware } from './common/logger.middleware';
-import { validateEnv } from './config/env.validation';
-import { PrismaModule } from './prisma/prisma.module';
+import { LoggerMiddleware } from './core/common/logger.middleware';
+import { validateEnv } from './core/config/env.validation';
+import { CoreModule } from './core/core.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MerchantsModule } from './merchants/merchants.module';
+import { SessionsModule } from './sessions/sessions.module';
 import { PaymentsModule } from './payments/payments.module';
 import { RequestsModule } from './requests/requests.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { AuditModule } from './audit/audit.module';
-import { HealthController } from './health.controller';
+import { HealthModule } from './health/health.module';
 
+/**
+ * Composition root. `CoreModule` carries the cross-cutting infrastructure (database,
+ * audit); everything else is a feature module owning one slice of the domain.
+ */
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     // Global baseline rate limit (10 req / 10s per IP). Tighter limits are applied per-route.
     ThrottlerModule.forRoot([{ ttl: 10_000, limit: 10 }]),
-    PrismaModule,
-    AuditModule,
+    CoreModule,
     AuthModule,
     UsersModule,
     MerchantsModule,
     NotificationsModule,
     RealtimeModule,
+    SessionsModule,
     PaymentsModule,
     RequestsModule,
     WebhooksModule,
+    HealthModule,
   ],
-  controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule implements NestModule {

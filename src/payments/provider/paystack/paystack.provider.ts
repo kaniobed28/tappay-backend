@@ -10,7 +10,7 @@ import {
   RefundResult,
   VerifyPaymentResult,
   WebhookEvent,
-} from './payment-provider.interface';
+} from '../payment-provider.interface';
 
 @Injectable()
 export class PaystackProvider implements PaymentProvider {
@@ -59,6 +59,7 @@ export class PaystackProvider implements PaymentProvider {
       throw new Error(data?.message ?? 'Paystack initialization failed');
     }
     return {
+      kind: 'redirect' as const,
       authorizationUrl: data.data.authorization_url,
       providerReference: data.data.reference,
       raw: data.data,

@@ -42,11 +42,15 @@ Download a service account key (Project Settings → Service accounts → Genera
 save it as `backend/firebase-service-account.json`, and set `FIREBASE_SERVICE_ACCOUNT_PATH` in `.env`
 (or paste the JSON into `FIREBASE_SERVICE_ACCOUNT_JSON`).
 
-## Paystack webhook
+## Provider webhooks
 
-Point your Paystack dashboard webhook URL at `https://<host>/api/webhooks/paystack`.
-The signature is verified with HMAC-SHA512 over the raw body, then the transaction is
-reconciled against Paystack's verify endpoint — the payload status is never trusted directly.
+Each provider posts to `https://<host>/api/webhooks/<provider name>` — `/api/webhooks/paystack`,
+`/api/webhooks/momo`. Callbacks for a provider that isn't the active one are ignored.
+
+Whatever arrives, the transaction is then reconciled against the provider's own status
+endpoint: the payload's status is never trusted directly. Paystack's signature is verified
+with HMAC-SHA512 over the raw body; MoMo callbacks are unsigned and sent exactly once, so
+they count only as a hint to re-verify (see [MTN Mobile Money](#mtn-mobile-money-ghana)).
 
 For local testing, expose your port with a tunnel (e.g. `ngrok http 3000`).
 
@@ -65,11 +69,75 @@ For local testing, expose your port with a tunnel (e.g. `ngrok http 3000`).
 | POST | `/api/payments` | auth | confirm session → start checkout |
 | GET  | `/api/payments/:id` | auth | poll a transaction (auto-reconciles) |
 | GET  | `/api/payments` | auth | transaction history |
-| POST | `/api/webhooks/paystack` | public | provider confirmation |
+| POST | `/api/webhooks/:provider` | public | provider confirmation |
+
+## Project layout
+
+```
+src/
+  core/          infrastructure every feature may use: prisma, audit, config, common
+  auth/ users/ merchants/ notifications/ realtime/   feature modules
+  sessions/      signed tap/QR hand-off (no provider knowledge)
+  payments/      settlement + reconciliation
+    provider/    the swappable provider layer (see below)
+  requests/ webhooks/ health/
+```
+
+`CoreModule` is global, so feature modules declare only their *feature* dependencies.
+Modules talk to each other through exported services, never by reaching into another
+module's folder.
 
 ## Swapping payment providers
 
-Implement `PaymentProvider`
-([`src/payments/provider/payment-provider.interface.ts`](src/payments/provider/payment-provider.interface.ts))
-and change the `PAYMENT_PROVIDER` binding in
-[`src/payments/payments.module.ts`](src/payments/payments.module.ts). Nothing else changes.
+Providers are selected at boot by the `PAYMENT_PROVIDER` env var — `momo` (default) or
+`paystack`. Nothing outside [`src/payments/provider/`](src/payments/provider/) knows which
+one is active, and an unknown name fails fast at startup rather than silently defaulting.
+
+Because MoMo is the default, production refuses to start without the `MOMO_*` credentials
+even when nothing names a provider — a misconfigured deploy fails at boot rather than at
+the first customer's payment.
+
+To add one: implement `PaymentProvider`
+([`payment-provider.interface.ts`](src/payments/provider/payment-provider.interface.ts))
+in its own folder, and add the class to `REGISTRY` in
+[`provider.module.ts`](src/payments/provider/provider.module.ts). Its `name` becomes the
+value of `PAYMENT_PROVIDER` that selects it, and the webhook path it is served on.
+
+A provider completes a payment one of two ways, which the client handles generically:
+
+| `checkout` | Means | Client behaviour |
+|-----------|-------|------------------|
+| `redirect` | hosted checkout page (card/bank) | opens `authorizationUrl` |
+| `push` | approval prompt on the payer's phone (mobile money) | shows `instruction`, polls `GET /api/payments/:id` |
+
+## MTN Mobile Money (Ghana)
+
+```
+PAYMENT_PROVIDER=momo
+MOMO_SUBSCRIPTION_KEY=…      # Collection product subscription (momodeveloper.mtn.com)
+MOMO_API_USER=…              # API user UUID
+MOMO_API_KEY=…               # API key for that user
+MOMO_TARGET_ENVIRONMENT=mtnghana   # 'sandbox' while testing
+MOMO_BASE_URL=https://proxy.momoapi.mtn.com   # sandbox: https://sandbox.momodeveloper.mtn.com
+```
+
+The sandbox hands you only the subscription key; the API user and key are created over
+the API, which this does for you:
+
+```
+MOMO_SUBSCRIPTION_KEY=<Collection primary key> npm run momo:sandbox
+```
+
+Worth knowing before going live:
+
+- **It charges a phone, not a card.** The payer needs a mobile number on file; without one
+  the API answers `400 {code: "payer_phone_required"}` and the app prompts for it.
+- **No callback guarantees.** MTN delivers the callback once, unsigned, and only to the host
+  registered as the API user's `providerCallbackHost`. Settlement therefore rides on polling —
+  `GET /api/payments/:id` re-verifies with MTN on every read.
+- **Refunds need a different product.** Collections cannot refund; that is the Disbursement
+  API, with its own subscription and a funded account. `POST /payments/:id/refund` fails
+  loudly rather than reporting money that never moved.
+- **The sandbox settles in EUR only.** Set `MOMO_SANDBOX_CURRENCY=EUR` (plus
+  `MOMO_SANDBOX_AS_CURRENCY=GHS`) to test GHS-priced sessions there; both are ignored
+  outside `MOMO_TARGET_ENVIRONMENT=sandbox`, and production refuses to boot on `sandbox`.

@@ -1,4 +1,4 @@
-import { signSession, verifySessionSignature, SessionSignatureFields } from '../src/payments/sessions/session-signing';
+import { signSession, verifySessionSignature, SessionSignatureFields } from '../src/sessions/session-signing';
 
 const SECRET = 'test-signing-secret-please-change';
 

@@ -1,19 +1,20 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../core/prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { MerchantsService } from '../merchants/merchants.service';
-import { SessionService } from '../payments/sessions/session.service';
+import { SessionService } from '../sessions/session.service';
 import { PaymentsService } from '../payments/payments.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { AuditService } from '../audit/audit.service';
-import { formatAmount } from '../common/format';
-import { PaymentRequest, PaymentRequestStatus, User } from '@prisma/client';
+import { AuditService } from '../core/audit/audit.service';
+import { formatAmount } from '../core/common/format';
+import { PaymentRequest, PaymentRequestStatus, TxnStatus, User } from '@prisma/client';
 
 /** A user record trimmed to the fields safe to expose to the counterparty. */
 type PersonView = Pick<User, 'id' | 'displayName' | 'email' | 'phone'>;
@@ -193,6 +194,34 @@ export class RequestsService {
     }
     if (request.status !== PaymentRequestStatus.PENDING) {
       throw new BadRequestException(`Request is ${request.status.toLowerCase()}`);
+    }
+
+    // In-flight guard: a rapid double-tap must not mint two Paystack charges. If a charge is
+    // already linked and not terminally FAILED, resume it (return the same checkout) instead
+    // of starting a new one. FAILED (or a missing txn) falls through to a fresh attempt.
+    if (request.transactionId) {
+      const existing = await this.prisma.transaction.findUnique({
+        where: { id: request.transactionId },
+      });
+      if (existing && existing.status !== TxnStatus.FAILED) {
+        // A push checkout (mobile money) has no URL to return to — the approval prompt is
+        // already on the payer's phone, so resuming means "keep waiting". A transaction
+        // only reaches PENDING once the provider accepted it, so this cannot be confused
+        // with a redirect checkout whose initialization died before storing a URL.
+        const pushInFlight = !existing.authorizationUrl && existing.status === TxnStatus.PENDING;
+        if (!existing.authorizationUrl && !pushInFlight) {
+          throw new ConflictException('A payment for this request is already in progress');
+        }
+        return {
+          transactionId: existing.id,
+          reference: existing.reference,
+          checkout: pushInFlight ? ('push' as const) : ('redirect' as const),
+          authorizationUrl: existing.authorizationUrl,
+          amount: existing.amount,
+          currency: existing.currency,
+          status: existing.status,
+        };
+      }
     }
 
     // The requester (payee) must be able to receive money — provision a merchant if needed.

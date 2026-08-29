@@ -8,7 +8,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClient } from '@prisma/client';
-import { SessionService } from '../../src/payments/sessions/session.service';
+import { SessionService } from '../../src/sessions/session.service';
 import { MerchantsService } from '../../src/merchants/merchants.service';
 
 const hasDb = !!process.env.DATABASE_URL;

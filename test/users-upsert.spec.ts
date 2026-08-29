@@ -1,3 +1,4 @@
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { UsersService } from '../src/users/users.service';
 
 /**
@@ -59,5 +60,49 @@ describe('UsersService.upsertFromIdentity', () => {
     await service.upsertFromIdentity({ uid: 'phone_only' } as any);
     expect(prisma.user.findFirst).not.toHaveBeenCalled();
     expect(prisma.user.create).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Mobile money charges a phone, not a card, so a payer with no number on file must be
+ * able to add one — and never by quietly taking a number that belongs to someone else.
+ */
+describe('UsersService.updateProfile phone', () => {
+  const setup = (update: jest.Mock) =>
+    new UsersService({ user: { update } } as any);
+
+  it('stores hand-typed Ghanaian numbers in E.164', async () => {
+    const update = jest.fn().mockImplementation(({ data }) => data);
+    for (const [typed, stored] of [
+      ['024 123 4567', '+233241234567'],
+      ['0241234567', '+233241234567'],
+      ['+233241234567', '+233241234567'],
+      ['233241234567', '+233241234567'],
+    ]) {
+      await expect(setup(update).updateProfile('u_1', { phone: typed })).resolves.toMatchObject({
+        phone: stored,
+      });
+    }
+  });
+
+  it('rejects numbers it cannot dial', async () => {
+    const update = jest.fn();
+    await expect(setup(update).updateProfile('u_1', { phone: '12345' })).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('reports a number already linked to another account instead of failing opaquely', async () => {
+    const update = jest.fn().mockRejectedValue({ code: 'P2002' });
+    await expect(
+      setup(update).updateProfile('u_1', { phone: '0241234567' }),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('leaves the phone untouched when the update does not mention it', async () => {
+    const update = jest.fn().mockImplementation(({ data }) => data);
+    const result = await setup(update).updateProfile('u_1', { displayName: 'Ama' });
+    expect(result).toMatchObject({ displayName: 'Ama', phone: undefined });
   });
 });
