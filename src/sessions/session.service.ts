@@ -1,9 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { PrismaService } from '../../prisma/prisma.service';
-import { MerchantsService } from '../../merchants/merchants.service';
-import { AuditService } from '../../audit/audit.service';
+import { PrismaService } from '../core/prisma/prisma.service';
+import { MerchantsService } from '../merchants/merchants.service';
+import { AuditService } from '../core/audit/audit.service';
 import { signSession, verifySessionSignature } from './session-signing';
 import { PaymentSession, SessionChannel, SessionStatus } from '@prisma/client';
 

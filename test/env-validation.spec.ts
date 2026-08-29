@@ -1,4 +1,4 @@
-import { validateEnv } from '../src/config/env.validation';
+import { validateEnv } from '../src/core/config/env.validation';
 
 const validDev = {
   NODE_ENV: 'development',

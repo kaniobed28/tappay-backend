@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { PrismaService } from '../core/prisma/prisma.service';
+import { toE164Ghana } from '../core/common/phone';
 import { VerifiedIdentity } from '../auth/firebase-admin.service';
 import { User } from '@prisma/client';
 
@@ -52,8 +53,33 @@ export class UsersService {
     });
   }
 
-  async updateProfile(userId: string, data: { displayName?: string; photoUrl?: string }) {
-    return this.prisma.user.update({ where: { id: userId }, data });
+  async updateProfile(
+    userId: string,
+    data: { displayName?: string; photoUrl?: string; phone?: string },
+  ) {
+    const { phone, ...rest } = data;
+    let normalized: string | undefined;
+    if (phone !== undefined) {
+      try {
+        normalized = toE164Ghana(phone);
+      } catch {
+        throw new BadRequestException(`${phone} is not a Ghanaian mobile number`);
+      }
+    }
+
+    try {
+      return await this.prisma.user.update({
+        where: { id: userId },
+        data: { ...rest, phone: normalized },
+      });
+    } catch (err) {
+      // `phone` is unique: a number already claimed by another account must not be
+      // silently swallowed, or two people would look like one payer.
+      if ((err as { code?: string }).code === 'P2002') {
+        throw new ConflictException('That mobile number is already linked to another account');
+      }
+      throw err;
+    }
   }
 
   /** Resolve a user by their email (case-insensitive) or phone. Returns null if none. */

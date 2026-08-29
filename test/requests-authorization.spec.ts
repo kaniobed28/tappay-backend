@@ -1,13 +1,13 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { RequestsService } from '../src/requests/requests.service';
-import { PaymentRequestStatus } from '@prisma/client';
+import { PaymentRequestStatus, TxnStatus } from '@prisma/client';
 
 /**
  * Guards the IDOR / self-service rules on money requests, mirroring the rigor of the
  * refund guards: you can't request from yourself, and only the addressed payer may
  * decline (a stranger must be forbidden, never leak the request's state).
  */
-function setup(request?: any) {
+function setup(request?: any, transaction?: any) {
   const prisma = {
     paymentRequest: {
       findUnique: jest.fn().mockResolvedValue(request ?? null),
@@ -18,6 +18,9 @@ function setup(request?: any) {
         ...data,
       })),
       update: jest.fn().mockImplementation(({ data }) => ({ ...request, ...data })),
+    },
+    transaction: {
+      findUnique: jest.fn().mockResolvedValue(transaction ?? null),
     },
   };
   const users = { findByIdentifier: jest.fn() };
@@ -38,7 +41,7 @@ function setup(request?: any) {
     realtime as any,
     audit as any,
   );
-  return { service, prisma, users, notifications, realtime };
+  return { service, prisma, users, notifications, realtime, sessions, payments };
 }
 
 const requester = { id: 'u_requester', displayName: 'Ama' } as any;
@@ -101,5 +104,44 @@ describe('RequestsService authorization', () => {
   it('rejects declining a request that is no longer pending', async () => {
     const { service } = setup({ ...pendingRequest, status: PaymentRequestStatus.PAID });
     await expect(service.decline(payer, 'req_1')).rejects.toThrow(BadRequestException);
+  });
+
+  it('resumes the same charge instead of minting a second one on a double-tap Pay', async () => {
+    const linkedRequest = { ...pendingRequest, transactionId: 'txn_existing' };
+    const inFlightTxn = {
+      id: 'txn_existing',
+      reference: 'tap_existing',
+      authorizationUrl: 'https://checkout.paystack.com/existing',
+      amount: 4200,
+      currency: 'GHS',
+      status: TxnStatus.PENDING,
+    };
+    const { service, sessions, payments } = setup(linkedRequest, inFlightTxn);
+    const result = await service.pay(payer, 'req_1');
+    // Returns the existing checkout, so the payer resumes the same charge.
+    expect(result.transactionId).toBe('txn_existing');
+    expect(result.authorizationUrl).toBe('https://checkout.paystack.com/existing');
+    // Critically: no second session/transaction was created.
+    expect(sessions.create).not.toHaveBeenCalled();
+    expect(payments.payFromSession).not.toHaveBeenCalled();
+  });
+
+  it('starts a fresh charge when the linked transaction previously FAILED', async () => {
+    const linkedRequest = { ...pendingRequest, transactionId: 'txn_failed' };
+    const failedTxn = { id: 'txn_failed', status: TxnStatus.FAILED };
+    const { service, sessions, payments } = setup(linkedRequest, failedTxn);
+    sessions.create.mockResolvedValue({ id: 'sess_new' });
+    payments.payFromSession.mockResolvedValue({
+      transactionId: 'txn_new',
+      reference: 'tap_new',
+      authorizationUrl: 'https://checkout.paystack.com/new',
+      amount: 4200,
+      currency: 'GHS',
+      status: TxnStatus.PENDING,
+    });
+    const result = await service.pay(payer, 'req_1');
+    expect(result.transactionId).toBe('txn_new');
+    expect(sessions.create).toHaveBeenCalledTimes(1);
+    expect(payments.payFromSession).toHaveBeenCalledTimes(1);
   });
 });

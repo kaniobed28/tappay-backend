@@ -7,7 +7,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { FirebaseAdminService } from '../auth/firebase-admin.service';
 import { UsersService } from '../users/users.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../core/prisma/prisma.service';
 
 interface PaymentEventPayload {
   transactionId: string;

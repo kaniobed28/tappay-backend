@@ -1,0 +1,14 @@
+{
+  // Typechecks the tests too. The app's tsconfig deliberately excludes `test/` so builds
+  // stay lean — which also means a test referencing a moved file compiles only when that
+  // suite runs. Integration specs skip themselves without a database, so a stale import
+  // there could sit unnoticed; `npm run typecheck` covers everything.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // No emit here, so rootDir only needs to be wide enough to cover both trees.
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["src/**/*", "test/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

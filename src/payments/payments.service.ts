@@ -8,13 +8,17 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
-import { PrismaService } from '../prisma/prisma.service';
-import { SessionService } from './sessions/session.service';
-import { PAYMENT_PROVIDER, PaymentProvider } from './provider/payment-provider.interface';
+import { PrismaService } from '../core/prisma/prisma.service';
+import { SessionService } from '../sessions/session.service';
+import {
+  PAYMENT_PROVIDER,
+  PayerActionRequiredError,
+  PaymentProvider,
+} from './provider/payment-provider.interface';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { NotificationsService } from '../notifications/notifications.service';
-import { AuditService } from '../audit/audit.service';
-import { formatAmount } from '../common/format';
+import { AuditService } from '../core/audit/audit.service';
+import { formatAmount } from '../core/common/format';
 import { PaymentRequestStatus, Transaction, TxnStatus, User } from '@prisma/client';
 
 @Injectable()
@@ -31,7 +35,10 @@ export class PaymentsService {
     private readonly audit: AuditService,
     config: ConfigService,
   ) {
-    this.callbackUrl = config.get<string>('PAYSTACK_CALLBACK_URL');
+    // Provider-agnostic first, with the original Paystack-specific name as a fallback so
+    // existing deployments keep working unchanged.
+    this.callbackUrl =
+      config.get<string>('PAYMENT_CALLBACK_URL') ?? config.get<string>('PAYSTACK_CALLBACK_URL');
   }
 
   /** Customer confirms a resolved session -> we create a txn and start provider checkout. */
@@ -82,6 +89,8 @@ export class PaymentsService {
         amount: session.amount,
         currency: session.currency,
         email,
+        // Mobile-money providers charge a phone, not a card.
+        payerPhone: payer.phone,
         callbackUrl: this.callbackUrl,
         metadata: { sessionId: session.id, merchantId: merchant.id, txnId: txn.id },
       });
@@ -97,7 +106,11 @@ export class PaymentsService {
       return {
         transactionId: updated.id,
         reference: updated.reference,
+        // 'redirect' -> open authorizationUrl; 'push' -> wait for the payer to approve
+        // the prompt on their phone and poll GET /payments/:id.
+        checkout: init.kind,
         authorizationUrl: updated.authorizationUrl,
+        instruction: init.instruction,
         amount: updated.amount,
         currency: updated.currency,
         status: updated.status,
@@ -108,7 +121,13 @@ export class PaymentsService {
         data: { status: TxnStatus.FAILED },
       });
       this.logger.error(`Provider init failed: ${(err as Error).message}`);
-      throw new BadRequestException('Failed to start payment with provider');
+      // Only a payer-actionable message is safe to pass on; anything else could leak
+      // provider internals, so it stays in the log.
+      throw new BadRequestException(
+        err instanceof PayerActionRequiredError
+          ? { message: err.message, code: err.code }
+          : 'Failed to start payment with provider',
+      );
     }
   }
 

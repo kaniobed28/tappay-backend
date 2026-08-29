@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
 import { ConfigService } from '@nestjs/config';
-import { PaystackProvider } from '../src/payments/provider/paystack.provider';
+import { PaystackProvider } from '../src/payments/provider/paystack/paystack.provider';
 
 const SECRET = 'sk_test_dummy_secret';
 

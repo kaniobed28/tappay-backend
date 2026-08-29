@@ -1,9 +1,9 @@
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { SessionService } from './session.service';
-import { CurrentUser } from '../../auth/current-user.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 import { User } from '@prisma/client';
-import { CreateSessionDto } from '../dto';
+import { CreateSessionDto } from './dto';
 
 @Controller('sessions')
 export class SessionController {

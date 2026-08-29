@@ -1,6 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
-import { Public } from './auth/public.decorator';
+import { Public } from '../auth/public.decorator';
 
 @SkipThrottle()
 @Controller('health')
