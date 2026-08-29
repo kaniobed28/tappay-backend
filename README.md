@@ -89,9 +89,13 @@ module's folder.
 
 ## Swapping payment providers
 
-Providers are selected at boot by the `PAYMENT_PROVIDER` env var — `paystack` (default)
-or `momo`. Nothing outside [`src/payments/provider/`](src/payments/provider/) knows which
+Providers are selected at boot by the `PAYMENT_PROVIDER` env var — `momo` (default) or
+`paystack`. Nothing outside [`src/payments/provider/`](src/payments/provider/) knows which
 one is active, and an unknown name fails fast at startup rather than silently defaulting.
+
+Because MoMo is the default, production refuses to start without the `MOMO_*` credentials
+even when nothing names a provider — a misconfigured deploy fails at boot rather than at
+the first customer's payment.
 
 To add one: implement `PaymentProvider`
 ([`payment-provider.interface.ts`](src/payments/provider/payment-provider.interface.ts))

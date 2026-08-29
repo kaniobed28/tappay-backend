@@ -36,7 +36,7 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
       );
     }
     // The active payment provider must have credentials.
-    const provider = String(config.PAYMENT_PROVIDER ?? 'paystack').trim().toLowerCase();
+    const provider = String(config.PAYMENT_PROVIDER ?? 'momo').trim().toLowerCase();
     if (provider === 'paystack' && !config.PAYSTACK_SECRET_KEY) {
       errors.push('PAYSTACK_SECRET_KEY is required when PAYMENT_PROVIDER=paystack');
     }

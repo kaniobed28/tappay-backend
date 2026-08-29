@@ -41,7 +41,7 @@ describe('application wiring', () => {
     // Asserting a specific provider here would assert the developer's own .env; the
     // registry's defaulting and switching are pinned hermetically below.
     const configured = (
-      moduleRef.get(ConfigService, { strict: false }).get<string>('PAYMENT_PROVIDER') ?? 'paystack'
+      moduleRef.get(ConfigService, { strict: false }).get<string>('PAYMENT_PROVIDER') ?? 'momo'
     )
       .trim()
       .toLowerCase();
@@ -65,15 +65,15 @@ describe('payment provider registry', () => {
       .useValue({ get: (key: string) => (key === 'PAYMENT_PROVIDER' ? name : undefined) })
       .compile();
 
-  it('defaults to Paystack when nothing is configured', async () => {
+  it('defaults to MTN MoMo when nothing is configured', async () => {
     const moduleRef = await withProvider();
-    expect(moduleRef.get<PaymentProvider>(PAYMENT_PROVIDER).name).toBe('paystack');
+    expect(moduleRef.get<PaymentProvider>(PAYMENT_PROVIDER).name).toBe('momo');
     await moduleRef.close();
   });
 
-  it('switches to MTN MoMo on PAYMENT_PROVIDER alone — no code change', async () => {
-    const moduleRef = await withProvider('momo');
-    expect(moduleRef.get<PaymentProvider>(PAYMENT_PROVIDER).name).toBe('momo');
+  it('switches to Paystack on PAYMENT_PROVIDER alone — no code change', async () => {
+    const moduleRef = await withProvider('paystack');
+    expect(moduleRef.get<PaymentProvider>(PAYMENT_PROVIDER).name).toBe('paystack');
     await moduleRef.close();
   });
 

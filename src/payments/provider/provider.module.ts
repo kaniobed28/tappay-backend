@@ -1,25 +1,30 @@
 import { Module, Provider, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { PAYMENT_PROVIDER, PaymentProvider } from './payment-provider.interface';
-import { PaystackProvider } from './paystack/paystack.provider';
 import { MomoProvider } from './momo/momo.provider';
+import { PaystackProvider } from './paystack/paystack.provider';
 
 /**
  * Every payment provider TapPay can settle through. Adding one means adding a class
  * here — nothing outside this folder learns its name.
  */
-const REGISTRY = [PaystackProvider, MomoProvider] as const;
+const REGISTRY = [MomoProvider, PaystackProvider] as const;
+
+/** Used when `PAYMENT_PROVIDER` is unset. TapPay is a Ghanaian app; MoMo is the norm. */
+const DEFAULT_PROVIDER = 'momo';
 
 /**
- * Binds `PAYMENT_PROVIDER` to the implementation named by the `PAYMENT_PROVIDER` env var
- * (default: paystack). Every candidate is constructed through Nest DI, so providers may
- * depend on any injectable; only the selected one is ever called.
+ * Binds `PAYMENT_PROVIDER` to the implementation it names. Every candidate is constructed
+ * through Nest DI, so providers may depend on any injectable; only the selected one is
+ * ever called.
  */
 const paymentProviderFactory: Provider = {
   provide: PAYMENT_PROVIDER,
   inject: [ConfigService, ...REGISTRY],
   useFactory: (config: ConfigService, ...candidates: PaymentProvider[]): PaymentProvider => {
-    const requested = (config.get<string>('PAYMENT_PROVIDER') ?? 'paystack').trim().toLowerCase();
+    const requested = (config.get<string>('PAYMENT_PROVIDER') ?? DEFAULT_PROVIDER)
+      .trim()
+      .toLowerCase();
     const selected = candidates.find((p) => p.name === requested);
     if (!selected) {
       const known = candidates.map((p) => p.name).join(', ');
