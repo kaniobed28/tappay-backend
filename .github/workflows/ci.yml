@@ -40,6 +40,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://tappay:tappay@localhost:5432/tappay_test
+      # Plain Postgres has no pooler, so the direct URL is the same one.
+      DIRECT_URL: postgresql://tappay:tappay@localhost:5432/tappay_test
       SESSION_SIGNING_SECRET: ci-integration-secret-0123456789
     steps:
       - uses: actions/checkout@v4

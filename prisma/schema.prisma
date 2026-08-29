@@ -4,7 +4,12 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // Pooled connection (PgBouncer) — what the running app uses.
   url      = env("DATABASE_URL")
+  // Unpooled connection — migrations only. PgBouncer's transaction mode can't hold the
+  // advisory locks and session state `prisma migrate` needs, so it must bypass the pooler.
+  // On a plain Postgres (local/CI) set this to the same value as DATABASE_URL.
+  directUrl = env("DIRECT_URL")
 }
 
 /// A registered person. Identity is owned by Firebase Auth; we mirror the minimum here.
